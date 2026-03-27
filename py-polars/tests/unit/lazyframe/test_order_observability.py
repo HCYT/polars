@@ -485,7 +485,8 @@ def test_group_by_input_ordering() -> None:
 
     plan = q.explain()
 
-    print(plan)
+    # Sort removed
+    assert 'BY [col("a")]' in plan
 
 
 @pytest.mark.parametrize(

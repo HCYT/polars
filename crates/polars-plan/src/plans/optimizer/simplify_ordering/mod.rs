@@ -151,7 +151,7 @@ impl SimplifyIRNodeOrder<'_> {
 
                 let exprs_observable_orders = eos.simplify_projected_exprs(
                     ae_nodes_scratch,
-                    out_edge.is_unordered() && !is_hstack,
+                    out_edge.is_unordered() && (in_edge.is_unordered() || !is_hstack),
                 );
 
                 let input_order_observe = ((exprs_observable_orders.contains(O::COLUMN)
@@ -266,18 +266,19 @@ impl SimplifyIRNodeOrder<'_> {
                 if !(order_observing_options
                     || keys_observable.contains(O::INDEPENDENT)
                     || eos.internally_observed_orders().contains(O::COLUMN)
-                    || (*maintain_order && keys_observable.contains(O::COLUMN)))
+                    || (*maintain_order
+                        && keys_observable.contains(O::COLUMN)
+                        && !out_edge.is_unordered()))
                 {
-                    *maintain_order = false;
                     *in_edge = Edge::Unordered;
                 }
 
-                if in_edge.is_unordered() || !(*maintain_order || order_observing_options) {
+                if out_edge.is_unordered()
+                    || *maintain_order == false
+                    || (in_edge.is_unordered() && !keys_observable.contains(O::INDEPENDENT))
+                {
                     *out_edge = Edge::Unordered;
-
-                    if !keys_observable.contains(O::INDEPENDENT) {
-                        *maintain_order = false;
-                    }
+                    *maintain_order = false;
                 }
             },
 
