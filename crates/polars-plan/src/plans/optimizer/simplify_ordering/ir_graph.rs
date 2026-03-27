@@ -15,7 +15,7 @@ pub(crate) struct IRNodeEdgeKeys<EdgeKey> {
 }
 
 pub(crate) struct IRCacheArenaNodes {
-    pub(crate) nodes: Vec<Node>,
+    nodes: Vec<Node>,
     hits: usize,
 }
 
