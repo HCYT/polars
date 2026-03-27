@@ -336,6 +336,17 @@ impl SimplifyIRNodeOrder<'_> {
 
                 #[cfg(feature = "asof_join")]
                 if let polars_ops::prelude::JoinType::AsOf(_) = &options.args.how {
+                    if out_edge.is_unordered()
+                        && (in_edge_lhs.is_unordered() || in_edge_rhs.is_unordered())
+                    {
+                        *in_edge_lhs = Edge::Unordered;
+                        *in_edge_rhs = Edge::Unordered;
+                    }
+
+                    if in_edge_lhs.is_unordered() && in_edge_rhs.is_unordered() {
+                        *out_edge = Edge::Unordered;
+                    }
+
                     return false;
                 }
 
