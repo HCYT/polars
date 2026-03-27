@@ -274,7 +274,7 @@ impl SimplifyIRNodeOrder<'_> {
                 }
 
                 if out_edge.is_unordered()
-                    || *maintain_order == false
+                    || !*maintain_order
                     || (in_edge.is_unordered() && !keys_observable.contains(O::INDEPENDENT))
                 {
                     *out_edge = Edge::Unordered;
