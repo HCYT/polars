@@ -476,14 +476,8 @@ impl ExprOrderSimplifier<'_> {
                 let maintain_order = sort_options.maintain_order;
                 let by_len = by.len();
 
-                if recursion.allows_deorder() {
-                    self.expr_arena
-                        .replace(current_ae_node, self.expr_arena.get(expr).clone());
-                    return self.rec(current_ae_node, RS::ALLOW_DEORDER);
-                }
-
                 let mut acc = ExprOrderAcc::default();
-                let observable_in_input = self.rec(expr, RS::NO_DEORDER);
+                let observable_in_input = self.rec(expr, recursion);
                 acc.add(observable_in_input, expr);
 
                 for i in 0..by_len {

@@ -14,6 +14,27 @@ pub(crate) struct IRNodeEdgeKeys<EdgeKey> {
     pub(crate) out_nodes: UnitVec<Node>,
 }
 
+pub(crate) struct IRCacheArenaNodes {
+    pub(crate) nodes: Vec<Node>,
+    hits: usize,
+}
+
+impl IRCacheArenaNodes {
+    pub(crate) fn update_cache_nodes(&self, ir_arena: &mut Arena<IR>) {
+        let IR::Cache { input, .. } = ir_arena.get(self.nodes[0]) else {
+            unreachable!()
+        };
+        let updated_input = *input;
+
+        for node in self.nodes.iter().skip(1) {
+            let IR::Cache { input, .. } = ir_arena.get_mut(*node) else {
+                unreachable!()
+            };
+            *input = updated_input;
+        }
+    }
+}
+
 /// Builds an IR traversal graph where caches are visited only after all of their consumers are
 /// visited.
 #[expect(clippy::type_complexity)]
@@ -24,12 +45,13 @@ pub(crate) fn build_ir_traversal_graph<EdgeKey, Edge>(
     Vec<Node>,                                     // Nodes in sink->source traversal order
     PlHashMap<IRNodeKey, IRNodeEdgeKeys<EdgeKey>>, // Edge keys for each node
     SlotMap<EdgeKey, Edge>,                        // Edges slotmap
+    PlHashMap<UniqueId, IRCacheArenaNodes>,        // All arena nodes that use this cache ID.
 )
 where
     EdgeKey: slotmap::Key,
     Edge: Default,
 {
-    let mut cache_hits: PlHashMap<UniqueId, usize> = PlHashMap::new();
+    let mut cache_track: PlHashMap<UniqueId, IRCacheArenaNodes> = PlHashMap::new();
     let mut num_nodes: usize = 0;
 
     let mut ir_nodes_stack = Vec::with_capacity(roots.len() + 8);
@@ -39,16 +61,29 @@ where
         let ir = ir_arena.get(ir_node);
 
         if let IR::Cache { id, .. } = ir {
-            let _ = cache_hits.try_insert(*id, 0);
-            *cache_hits.get_mut(id).unwrap() += 1;
-        } else {
-            num_nodes += 1;
+            use hashbrown::hash_map::Entry;
+
+            match cache_track.entry(*id) {
+                Entry::Occupied(mut v) => {
+                    let tracker = v.get_mut();
+                    tracker.hits += 1;
+                    tracker.nodes.push(ir_node);
+                    continue;
+                },
+                Entry::Vacant(v) => {
+                    v.insert(IRCacheArenaNodes {
+                        nodes: vec![ir_node],
+                        hits: 1,
+                    });
+                },
+            }
         }
 
+        num_nodes += 1;
         ir.copy_inputs(&mut ir_nodes_stack);
     }
 
-    num_nodes += cache_hits.len();
+    num_nodes += cache_track.len();
 
     let mut all_edges_map: SlotMap<EdgeKey, Edge> = SlotMap::with_capacity_and_key(num_nodes);
     let mut ir_node_to_edges_map: PlHashMap<IRNodeKey, IRNodeEdgeKeys<EdgeKey>> =
@@ -57,24 +92,30 @@ where
     ir_nodes_stack.reserve_exact(num_nodes);
     ir_nodes_stack.extend_from_slice(roots);
 
-    for i in 0..num_nodes + 1 {
+    let iterations: usize = num_nodes + cache_track.values().map(|v| v.hits - 1).sum::<usize>();
+
+    for i in 0..usize::MAX {
         let Some(current_node) = ir_nodes_stack.get(i).copied() else {
             break;
         };
 
-        assert!(i < num_nodes);
+        debug_assert!(i < iterations + 1);
 
         let ir = ir_arena.get(current_node);
 
-        if let IR::Cache { id, .. } = ir {
-            let hits = cache_hits.get_mut(id).unwrap();
-            *hits -= 1;
+        let current_node = if let IR::Cache { id, .. } = ir {
+            let tracker = cache_track.get_mut(id).unwrap();
+            tracker.hits -= 1;
 
-            if *hits != 0 {
+            if tracker.hits != 0 {
                 debug_assert!(i < ir_nodes_stack.len());
                 continue;
             }
-        }
+
+            tracker.nodes[0]
+        } else {
+            current_node
+        };
 
         let inputs_start_idx = ir_nodes_stack.len();
         ir_arena.get(current_node).copy_inputs(&mut ir_nodes_stack);
@@ -106,7 +147,12 @@ where
         current_edges.in_edges = current_node_in_edges;
     }
 
-    (ir_nodes_stack, ir_node_to_edges_map, all_edges_map)
+    (
+        ir_nodes_stack,
+        ir_node_to_edges_map,
+        all_edges_map,
+        cache_track,
+    )
 }
 
 pub(crate) fn unpack_edges_mut<

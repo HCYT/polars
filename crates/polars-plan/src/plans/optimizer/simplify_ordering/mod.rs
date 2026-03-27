@@ -41,7 +41,7 @@ pub(crate) fn simplify_ir_ordering(
     ir_arena: &mut Arena<IR>,
     expr_arena: &mut Arena<AExpr>,
 ) {
-    let (mut ir_nodes_stack, mut ir_node_to_edges_map, mut all_edges_map) =
+    let (mut ir_nodes_stack, mut ir_node_to_edges_map, mut all_edges_map, cache_track) =
         build_ir_traversal_graph(roots, ir_arena);
 
     let eos_revisit_cache = &mut PlHashMap::default();
@@ -70,6 +70,10 @@ pub(crate) fn simplify_ir_ordering(
         }
 
         simplifier.simplify_ir_node_orders(node);
+    }
+
+    for (_, v) in cache_track.into_iter() {
+        v.update_cache_nodes(ir_arena);
     }
 }
 
@@ -289,7 +293,12 @@ impl SimplifyIRNodeOrder<'_> {
                         })
                 {
                     options.maintain_order = false;
-                    options.keep_strategy = K::Any;
+
+                    match options.keep_strategy {
+                        K::First | K::Last | K::Any => options.keep_strategy = K::Any,
+                        K::None => {},
+                    };
+
                     *in_edge = Edge::Unordered;
                 }
             },
