@@ -302,8 +302,8 @@ impl SimplifyIRNodeOrder<'_> {
                     options.maintain_order = false;
 
                     match options.keep_strategy {
-                        K::First | K::Last | K::Any => options.keep_strategy = K::Any,
-                        K::None => {},
+                        K::First | K::Last => options.keep_strategy = K::Any,
+                        K::Any | K::None => {},
                     };
 
                     *in_edge = Edge::Unordered;
