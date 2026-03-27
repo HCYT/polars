@@ -145,8 +145,8 @@ impl SimplifyIRNodeOrder<'_> {
                     out_edge.is_unordered() && exprs_is_full_output,
                 );
 
-                let input_cols_order_observed_by_consumer =
-                    !out_edge.is_unordered() && exprs_observable_orders.contains(O::COLUMN);
+                let input_cols_order_observed_by_consumer = !out_edge.is_unordered()
+                    && (exprs_observable_orders.contains(O::COLUMN) || !exprs_is_full_output);
 
                 // Mixed independent<>column order due to hstack
                 let input_cols_order_observed_by_mixed_order_hstack =
@@ -159,8 +159,9 @@ impl SimplifyIRNodeOrder<'_> {
                     *in_edge = Edge::Unordered;
                 }
 
-                if exprs_observable_orders.is_empty()
-                    || (exprs_observable_orders == O::COLUMN && in_edge.is_unordered())
+                if !exprs_observable_orders.contains(O::INDEPENDENT)
+                    && (in_edge.is_unordered()
+                        || (exprs_is_full_output && !exprs_observable_orders.contains(O::COLUMN)))
                 {
                     *out_edge = Edge::Unordered;
                 }

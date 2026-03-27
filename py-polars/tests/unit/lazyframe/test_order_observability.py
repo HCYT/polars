@@ -447,24 +447,15 @@ def test_filter_sensitivity(expr: pl.Expr, is_ordered: bool) -> None:
     [
         ([pl.col.a], True, None),
         ([pl.col.a, pl.col.b], True, None),
-        ([pl.col.a.unique()], False, ["a"]),
-        ([pl.col.a.unique(maintain_order=True)], True, ["a"]),
-        ([pl.col.a.min()], False, []),
-        ([pl.col.a.product()], False, []),
-        ([pl.col.a.unique(maintain_order=True), pl.col.b], True, ["a"]),
+        ([pl.col.a.unique()], True, ["a"]),
+        ([pl.col.a.min()], True, None),
+        ([pl.col.a.product()], True, None),
+        ([pl.col.a.unique(), pl.col.b], True, ["a"]),
         ([pl.col.a.unique(), pl.col.b.unique()], False, ["a", "b"]),
         ([pl.col.a.min(), pl.col.b.min()], False, None),
         ([pl.col.a.product(), pl.col.b.null_count()], False, None),
-        ([pl.col.b.unique(maintain_order=True)], True, ["b"]),
-        (
-            [
-                pl.col.a.unique(maintain_order=True),
-                pl.col.b.unique(),
-                pl.col.a.alias("c"),
-            ],
-            True,
-            ["b"],
-        ),
+        ([pl.col.b.unique()], True, ["b"]),
+        ([pl.col.a.unique(), pl.col.b.unique(), pl.col.a.alias("c")], True, ["a", "b"]),
         (
             [pl.col.a.unique(), pl.col.b.unique(), (pl.col.a + 1).unique().alias("c")],
             False,
@@ -501,12 +492,10 @@ def test_with_columns_sensitivity(
     df_unopt = lf.collect(optimizations=pl.QueryOptFlags(check_order_observe=False))
 
     if unordered_columns is None:
-        assert_frame_equal(df_opt, df_unopt, check_row_order=is_ordered)
+        assert_frame_equal(df_opt, df_unopt)
     else:
         assert_frame_equal(
-            df_opt.drop(unordered_columns),
-            df_unopt.drop(unordered_columns),
-            check_row_order=is_ordered,
+            df_opt.drop(unordered_columns), df_unopt.drop(unordered_columns)
         )
         for c in unordered_columns:
             assert_series_equal(df_opt[c], df_unopt[c], check_order=False)
