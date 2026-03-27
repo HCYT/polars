@@ -129,10 +129,10 @@ impl SimplifyIRNodeOrder<'_> {
 
         match self.ir_arena.get_mut(current_ir_node) {
             IR::Select { .. } | IR::HStack { .. } => {
-                let (exprs, exprs_is_full_output) = match self.ir_arena.get_mut(current_ir_node) {
-                    IR::Select { expr, .. } => (expr, true),
+                let (exprs, is_hstack) = match self.ir_arena.get_mut(current_ir_node) {
+                    IR::Select { expr, .. } => (expr, false),
                     IR::HStack { exprs, schema, .. } => {
-                        let v = schema.len() == exprs.len();
+                        let v = schema.len() != exprs.len();
                         (exprs, v)
                     },
                     _ => unreachable!(),
@@ -147,26 +147,22 @@ impl SimplifyIRNodeOrder<'_> {
 
                 let exprs_observable_orders = eos.simplify_projected_exprs(
                     ae_nodes_scratch,
-                    out_edge.is_unordered() && exprs_is_full_output,
+                    out_edge.is_unordered() && !is_hstack,
                 );
 
-                let input_cols_order_observed_by_consumer = !out_edge.is_unordered()
-                    && (exprs_observable_orders.contains(O::COLUMN) || !exprs_is_full_output);
+                let input_order_observe = ((exprs_observable_orders.contains(O::COLUMN)
+                    || is_hstack)
+                    && !out_edge.is_unordered())
+                    || (is_hstack && exprs_observable_orders.contains(O::INDEPENDENT))
+                    || eos.internally_observed_orders().contains(O::COLUMN);
 
-                // Mixed independent<>column order due to hstack
-                let input_cols_order_observed_by_mixed_order_hstack =
-                    !exprs_is_full_output && exprs_observable_orders.contains(O::INDEPENDENT);
-
-                if !(input_cols_order_observed_by_consumer
-                    || input_cols_order_observed_by_mixed_order_hstack
-                    || eos.internally_observed_orders().contains(O::COLUMN))
-                {
+                if !input_order_observe {
                     *in_edge = Edge::Unordered;
                 }
 
                 if !exprs_observable_orders.contains(O::INDEPENDENT)
                     && (in_edge.is_unordered()
-                        || (exprs_is_full_output && !exprs_observable_orders.contains(O::COLUMN)))
+                        || !(is_hstack || !exprs_observable_orders.contains(O::COLUMN)))
                 {
                     *out_edge = Edge::Unordered;
                 }
