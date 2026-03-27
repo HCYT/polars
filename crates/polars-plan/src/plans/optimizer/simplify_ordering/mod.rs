@@ -318,6 +318,8 @@ impl SimplifyIRNodeOrder<'_> {
                 right_on,
                 options,
             } => {
+                use polars_ops::prelude::JoinType;
+
                 let ([in_edge_lhs, in_edge_rhs], [out_edge]) = unpack_edges!(3);
 
                 let mut eos = expr_order_simplifier!();
@@ -335,7 +337,7 @@ impl SimplifyIRNodeOrder<'_> {
                 assert!(!eos.internally_observed_orders().contains(O::COLUMN));
 
                 #[cfg(feature = "asof_join")]
-                if let polars_ops::prelude::JoinType::AsOf(_) = &options.args.how {
+                if let JoinType::AsOf(_) = &options.args.how {
                     if in_edge_lhs.is_unordered()
                         || (out_edge.is_unordered() && in_edge_rhs.is_unordered())
                     {
@@ -368,7 +370,14 @@ impl SimplifyIRNodeOrder<'_> {
                     }
                 }
 
-                if in_edge_rhs.is_unordered() || options.args.maintain_order == JO::Left {
+                if in_edge_rhs.is_unordered()
+                    || options.args.maintain_order == JO::Left
+                    || match &options.args.how {
+                        #[cfg(feature = "semi_anti_join")]
+                        JoinType::Semi | JoinType::Anti => true,
+                        _ => false,
+                    }
+                {
                     *in_edge_rhs = Edge::Unordered;
 
                     match options.args.maintain_order {
