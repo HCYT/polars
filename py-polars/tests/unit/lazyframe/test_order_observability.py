@@ -389,6 +389,54 @@ def test_group_by_key_sensitivity(
     assert order_maintained == expr_observes_or_produces_order
 
 
+def test_group_by_input_ordering() -> None:
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=False)
+        .group_by(pl.col("a").sort(), maintain_order=True)
+        .agg(pl.len())
+    )
+
+    plan = q.explain()
+
+    assert "AGGREGATE[maintain_order: false" in plan
+
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=True)
+        .group_by(pl.col("a").sort(), maintain_order=False)
+        .agg(pl.len())
+    )
+
+    plan = q.explain()
+
+    # No deordering: Mixed independent<>Column ordering (sort()<>col())
+    assert "UNIQUE[maintain_order: true" in plan
+
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=True)
+        .group_by("a", maintain_order=False)
+        .agg(first=pl.first("a"))
+    )
+
+    plan = q.explain()
+
+    # No deordering: Aggregation observes order
+    assert "UNIQUE[maintain_order: true" in plan
+
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=True)
+        .group_by("a", maintain_order=False)
+        .agg(first=pl.max("a"))
+    )
+
+    plan = q.explain()
+
+    assert "UNIQUE[maintain_order: false" in plan
+
+
 @pytest.mark.parametrize(
     ("expr", "is_ordered"),
     [
