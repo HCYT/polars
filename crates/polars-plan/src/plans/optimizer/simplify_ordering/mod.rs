@@ -251,7 +251,10 @@ impl SimplifyIRNodeOrder<'_> {
                 let ae_nodes_scratch = self.ae_nodes_scratch.get();
 
                 ae_nodes_scratch.extend(keys.iter().map(|eir| eir.node()));
-                let keys_observable = eos.simplify_projected_exprs(ae_nodes_scratch, false);
+                let keys_observable = eos.simplify_projected_exprs(
+                    ae_nodes_scratch,
+                    in_edge.is_unordered() && !*maintain_order,
+                );
 
                 ae_nodes_scratch.clear();
                 ae_nodes_scratch.extend(aggs.iter().map(|eir| eir.node()));
@@ -270,8 +273,11 @@ impl SimplifyIRNodeOrder<'_> {
                 }
 
                 if in_edge.is_unordered() || !(*maintain_order || order_observing_options) {
-                    *maintain_order = false;
                     *out_edge = Edge::Unordered;
+
+                    if !keys_observable.contains(O::INDEPENDENT) {
+                        *maintain_order = false;
+                    }
                 }
             },
 

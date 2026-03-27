@@ -354,6 +354,46 @@ def test_with_columns_implicit_columns() -> None:
 
 
 @pytest.mark.parametrize(
+    ("expr", "values", "is_ordered", "is_output_ordered"),
+    [
+        (pl.col.a, [1, 2, 3], False, False),
+        (pl.col.a.map_batches(lambda x: x), [1, 2, 3], True, False),
+        (
+            pl.col.a.map_batches(lambda x: x, is_elementwise=True),
+            [1, 2, 3],
+            False,
+            False,
+        ),
+        (
+            pl.col.a.cast(pl.List(pl.Int64))
+            .map_batches(lambda x: x, is_elementwise=True)
+            .explode(),
+            [1, 2, 3],
+            True,
+            False,
+        ),
+        (pl.col.a.sort(), [1, 2, 3], True, True),
+        (pl.col.a.sort() + pl.col.a, None, True, True),
+        (pl.col.a.min() + pl.col.a, [2, 3, 4], False, False),
+        (pl.col.a.first() + pl.col.a, None, False, False),
+    ],
+)
+def test_group_by_key_sensitivity(
+    expr: pl.Expr, values: list[int] | None, is_ordered: bool, is_output_ordered: bool
+) -> None:
+    lf = pl.LazyFrame({"a": [2, 2, 1, 3], "b": ["A", "B", "C", "D"]}).unique()
+
+    q = lf.group_by(expr.alias("a"), maintain_order=True).agg("b")
+    df = q.collect()
+    assert ("AGGREGATE[maintain_order: true]" in q.explain()) is is_ordered
+
+    expected_values = pl.Series("a", values)
+
+    if values is not None:
+        assert_series_equal(df["a"], expected_values, check_order=is_output_ordered)
+
+
+@pytest.mark.parametrize(
     ("expr", "expr_observes_or_produces_order"),
     [
         (pl.col.a, False),
@@ -374,7 +414,7 @@ def test_with_columns_implicit_columns() -> None:
         (pl.col.a.first() + pl.col.a, True),
     ],
 )
-def test_group_by_key_sensitivity(
+def test_group_by_key_sensitivity_ordered_input(
     expr: pl.Expr,
     expr_observes_or_produces_order: bool,
 ) -> None:
@@ -399,7 +439,7 @@ def test_group_by_input_ordering() -> None:
 
     plan = q.explain()
 
-    assert "AGGREGATE[maintain_order: false" in plan
+    assert "AGGREGATE[maintain_order: true" in plan
 
     q = (
         pl.LazyFrame({"a": [0, 1, 1]})
@@ -435,6 +475,17 @@ def test_group_by_input_ordering() -> None:
     plan = q.explain()
 
     assert "UNIQUE[maintain_order: false" in plan
+
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=False)
+        .group_by(pl.col("a").sort(), maintain_order=False)
+        .agg(pl.len())
+    )
+
+    plan = q.explain()
+
+    print(plan)
 
 
 @pytest.mark.parametrize(
