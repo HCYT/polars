@@ -4,6 +4,7 @@ use polars_utils::arena::{Arena, Node};
 use polars_utils::unique_id::UniqueId;
 use slotmap::SlotMap;
 
+use crate::plans::simplify_ordering::ir_node_key::IRNodeKey;
 use crate::prelude::IR;
 
 #[derive(Default, Debug)]
@@ -20,9 +21,9 @@ pub(crate) fn build_ir_traversal_graph<EdgeKey, Edge>(
     roots: &[Node],
     ir_arena: &mut Arena<IR>,
 ) -> (
-    Vec<Node>,                                // Nodes in sink->source traversal order
-    PlHashMap<Node, IRNodeEdgeKeys<EdgeKey>>, // Edge keys for each node
-    SlotMap<EdgeKey, Edge>,                   // Edges slotmap
+    Vec<Node>,                                     // Nodes in sink->source traversal order
+    PlHashMap<IRNodeKey, IRNodeEdgeKeys<EdgeKey>>, // Edge keys for each node
+    SlotMap<EdgeKey, Edge>,                        // Edges slotmap
 )
 where
     EdgeKey: slotmap::Key,
@@ -50,7 +51,7 @@ where
     num_nodes += cache_hits.len();
 
     let mut all_edges_map: SlotMap<EdgeKey, Edge> = SlotMap::with_capacity_and_key(num_nodes);
-    let mut ir_node_to_edges_map: PlHashMap<Node, IRNodeEdgeKeys<EdgeKey>> =
+    let mut ir_node_to_edges_map: PlHashMap<IRNodeKey, IRNodeEdgeKeys<EdgeKey>> =
         PlHashMap::with_capacity(num_nodes);
 
     ir_nodes_stack.reserve_exact(num_nodes);
@@ -84,19 +85,22 @@ where
 
         for i in 0..num_inputs {
             let input_node = ir_nodes_stack[i + inputs_start_idx];
-            let _ = ir_node_to_edges_map.try_insert(input_node, IRNodeEdgeKeys::default());
+            let input_node_key = IRNodeKey::new(input_node, ir_arena);
+            let _ = ir_node_to_edges_map.try_insert(input_node_key, IRNodeEdgeKeys::default());
             let IRNodeEdgeKeys {
                 out_edges: input_node_out_edges,
                 out_nodes: input_node_out_nodes,
                 ..
-            } = ir_node_to_edges_map.get_mut(&input_node).unwrap();
+            } = ir_node_to_edges_map.get_mut(&input_node_key).unwrap();
 
             input_node_out_edges.push(current_node_in_edges[i]);
             input_node_out_nodes.push(current_node);
         }
 
-        let _ = ir_node_to_edges_map.try_insert(current_node, IRNodeEdgeKeys::default());
-        let current_edges = ir_node_to_edges_map.get_mut(&current_node).unwrap();
+        let current_node_key = IRNodeKey::new(current_node, ir_arena);
+
+        let _ = ir_node_to_edges_map.try_insert(current_node_key, IRNodeEdgeKeys::default());
+        let current_edges = ir_node_to_edges_map.get_mut(&current_node_key).unwrap();
 
         assert!(current_edges.in_edges.is_empty());
         current_edges.in_edges = current_node_in_edges;

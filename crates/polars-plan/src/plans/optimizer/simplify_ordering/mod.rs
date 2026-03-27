@@ -1,5 +1,6 @@
 pub(crate) mod expr;
 pub(crate) mod ir_graph;
+pub(crate) mod ir_node_key;
 
 use std::sync::Arc;
 
@@ -12,6 +13,7 @@ use slotmap::{SlotMap, new_key_type};
 
 use crate::dsl::{SinkTypeIR, UnionOptions};
 use crate::plans::simplify_ordering::expr::{ExprOrderSimplifier, ObservableOrders};
+use crate::plans::simplify_ordering::ir_node_key::IRNodeKey;
 use crate::plans::{IRAggExpr, is_scalar_ae};
 use crate::prelude::{AExpr, IR};
 
@@ -72,7 +74,7 @@ pub(crate) fn simplify_ir_ordering(
 }
 
 struct SimplifyIRNodeOrder<'a> {
-    ir_node_to_edges_map: &'a mut PlHashMap<Node, IRNodeEdgeKeys<EdgeKey>>,
+    ir_node_to_edges_map: &'a mut PlHashMap<IRNodeKey, IRNodeEdgeKeys<EdgeKey>>,
     all_edges_map: &'a mut EdgesMap,
     ir_arena: &'a mut Arena<IR>,
     expr_arena: &'a mut Arena<AExpr>,
@@ -85,7 +87,10 @@ impl SimplifyIRNodeOrder<'_> {
     fn simplify_ir_node_orders(&mut self, current_ir_node: Node) -> bool {
         use ObservableOrders as O;
 
-        let current_ir_node_edges = self.ir_node_to_edges_map.get(&current_ir_node).unwrap();
+        let current_ir_node_edges = self
+            .ir_node_to_edges_map
+            .get(&IRNodeKey::new(current_ir_node, self.ir_arena))
+            .unwrap();
 
         let IRNodeEdgeKeys {
             in_edges,
@@ -432,6 +437,7 @@ impl SimplifyIRNodeOrder<'_> {
             },
 
             IR::Cache { .. } => {
+                dbg!(current_ir_node_edges);
                 assert_eq!(in_edges.len(), 1);
 
                 if get_edge!(in_edges[0]).is_unordered() {
@@ -476,7 +482,10 @@ impl SimplifyIRNodeOrder<'_> {
     }
 
     fn unlink_node(&mut self, current_ir_node: Node, input_to_current_ir_node: Node) -> bool {
-        let current_ir_node_edges = self.ir_node_to_edges_map.get(&current_ir_node).unwrap();
+        let current_ir_node_edges = self
+            .ir_node_to_edges_map
+            .get(&IRNodeKey::new(current_ir_node, self.ir_arena))
+            .unwrap();
 
         let IRNodeEdgeKeys {
             out_nodes,
@@ -501,6 +510,7 @@ impl SimplifyIRNodeOrder<'_> {
         let (consumer_node_input_idx, node) = iter.next().unwrap();
         *node = input_to_current_ir_node;
         assert!(iter.next().is_none());
+        drop(iter);
 
         let [
             Some(IRNodeEdgeKeys {
@@ -512,9 +522,10 @@ impl SimplifyIRNodeOrder<'_> {
                 out_nodes: new_input_node_out_nodes,
                 ..
             }),
-        ] = self
-            .ir_node_to_edges_map
-            .get_disjoint_mut([&consumer_node, &input_to_current_ir_node])
+        ] = self.ir_node_to_edges_map.get_disjoint_mut([
+            &IRNodeKey::new(consumer_node, self.ir_arena),
+            &IRNodeKey::new(input_to_current_ir_node, self.ir_arena),
+        ])
         else {
             unreachable!()
         };
