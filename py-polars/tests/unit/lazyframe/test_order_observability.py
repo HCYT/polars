@@ -439,6 +439,7 @@ def test_group_by_input_ordering() -> None:
 
     plan = q.explain()
 
+    # No deordering: Independent ordering produced by key expr observable in output
     assert "AGGREGATE[maintain_order: true" in plan
 
     q = (
