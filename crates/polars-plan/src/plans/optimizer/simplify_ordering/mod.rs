@@ -286,11 +286,11 @@ impl SimplifyIRNodeOrder<'_> {
                 }
 
                 if in_edge.is_unordered()
-                    && !options.maintain_order
-                    && match options.keep_strategy {
-                        K::First | K::Last => false,
-                        K::Any | K::None => true,
-                    }
+                    || (!options.maintain_order
+                        && match options.keep_strategy {
+                            K::First | K::Last => false,
+                            K::Any | K::None => true,
+                        })
                 {
                     options.maintain_order = false;
                     options.keep_strategy = K::Any;
