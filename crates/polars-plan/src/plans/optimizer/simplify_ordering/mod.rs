@@ -272,20 +272,20 @@ impl SimplifyIRNodeOrder<'_> {
             IR::Distinct { input: _, options } => {
                 let ([in_edge], [out_edge]) = unpack_edges!(2);
 
-                if (!options.maintain_order || out_edge.is_unordered())
-                    && !matches!(
-                        options.keep_strategy,
-                        UniqueKeepStrategy::First | UniqueKeepStrategy::Last
-                    )
-                {
-                    options.maintain_order = false;
-                    options.keep_strategy = UniqueKeepStrategy::Any;
-                    *in_edge = Edge::Unordered;
-                }
-
-                if in_edge.is_unordered() || !options.maintain_order {
+                if !options.maintain_order || out_edge.is_unordered() {
                     options.maintain_order = false;
                     *out_edge = Edge::Unordered;
+                }
+
+                if in_edge.is_unordered()
+                    || !(options.maintain_order
+                        || matches!(
+                            options.keep_strategy,
+                            UniqueKeepStrategy::First | UniqueKeepStrategy::Last
+                        ))
+                {
+                    options.maintain_order = false;
+                    *in_edge = Edge::Unordered;
                 }
             },
 
