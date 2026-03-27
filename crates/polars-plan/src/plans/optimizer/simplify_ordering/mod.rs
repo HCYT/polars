@@ -162,7 +162,7 @@ impl SimplifyIRNodeOrder<'_> {
 
                 if !exprs_observable_orders.contains(O::INDEPENDENT)
                     && (in_edge.is_unordered()
-                        || !(is_hstack || !exprs_observable_orders.contains(O::COLUMN)))
+                        || !(is_hstack || exprs_observable_orders.contains(O::COLUMN)))
                 {
                     *out_edge = Edge::Unordered;
                 }
