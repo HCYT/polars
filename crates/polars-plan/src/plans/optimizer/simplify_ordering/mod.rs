@@ -437,7 +437,6 @@ impl SimplifyIRNodeOrder<'_> {
             },
 
             IR::Cache { .. } => {
-                dbg!(current_ir_node_edges);
                 assert_eq!(in_edges.len(), 1);
 
                 if get_edge!(in_edges[0]).is_unordered() {
