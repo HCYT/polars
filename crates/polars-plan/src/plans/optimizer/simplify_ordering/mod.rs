@@ -36,7 +36,7 @@ new_key_type! {
 
 type EdgesMap = SlotMap<EdgeKey, Edge>;
 
-pub(crate) fn simplify_ir_ordering(
+pub fn simplify_ir_ordering(
     roots: &[Node],
     ir_arena: &mut Arena<IR>,
     expr_arena: &mut Arena<AExpr>,
