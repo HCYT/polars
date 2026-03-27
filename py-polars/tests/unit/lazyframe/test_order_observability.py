@@ -485,7 +485,7 @@ def test_group_by_input_ordering() -> None:
 
     plan = q.explain()
 
-    # Sort removed
+    # Sort expr removed
     assert 'BY [col("a")]' in plan
 
 
