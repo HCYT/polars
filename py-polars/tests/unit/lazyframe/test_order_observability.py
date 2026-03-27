@@ -489,6 +489,18 @@ def test_group_by_input_ordering() -> None:
     # Sort expr removed
     assert 'BY [col("a")]' in plan
 
+    q = (
+        pl.LazyFrame({"a": [0, 1, 1]})
+        .unique(maintain_order=True)
+        .group_by(pl.col("a").sort(), maintain_order=False)
+        .agg(pl.len())
+    )
+
+    plan = q.explain()
+
+    # No deordering: Independently ordered key expr with ordered input IR.
+    assert 'BY [col("a").sort(asc)]' in plan
+
 
 @pytest.mark.parametrize(
     ("expr", "is_ordered"),
