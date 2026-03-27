@@ -285,6 +285,7 @@ impl SimplifyIRNodeOrder<'_> {
                         ))
                 {
                     options.maintain_order = false;
+                    options.keep_strateg = UniqueKeepStrategy::Any;
                     *in_edge = Edge::Unordered;
                 }
             },
