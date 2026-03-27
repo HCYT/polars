@@ -432,11 +432,11 @@ impl SimplifyIRNodeOrder<'_> {
             },
 
             IR::Cache { .. } => {
+                assert_eq!(in_edges.len(), 1);
+
                 if out_edges.iter().all(|k| get_edge!(*k).is_unordered()) {
-                    for k in in_edges.iter() {
-                        *get_edge_mut!(*k) = Edge::Unordered
-                    }
-                } else if in_edges.iter().all(|k| get_edge!(*k).is_unordered()) {
+                    *get_edge_mut!(in_edges[0]) = Edge::Unordered
+                } else if get_edge!(in_edges[0]).is_unordered() {
                     for k in out_edges.iter() {
                         *get_edge_mut!(*k) = Edge::Unordered
                     }
