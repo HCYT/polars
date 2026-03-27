@@ -99,7 +99,7 @@ where
             break;
         };
 
-        debug_assert!(i < iterations + 1);
+        debug_assert!(i < iterations);
 
         let ir = ir_arena.get(current_node);
 
