@@ -95,7 +95,7 @@ where
     let iterations: usize = num_nodes + cache_track.values().map(|v| v.hits - 1).sum::<usize>();
 
     for i in 0..usize::MAX {
-        let Some(current_node) = ir_nodes_stack.get(i).copied() else {
+        let Some(mut current_node) = ir_nodes_stack.get(i).copied() else {
             break;
         };
 
@@ -103,7 +103,7 @@ where
 
         let ir = ir_arena.get(current_node);
 
-        let current_node = if let IR::Cache { id, .. } = ir {
+        if let IR::Cache { id, .. } = ir {
             let tracker = cache_track.get_mut(id).unwrap();
             tracker.hits -= 1;
 
@@ -112,10 +112,8 @@ where
                 continue;
             }
 
-            tracker.nodes[0]
-        } else {
-            current_node
-        };
+            current_node = tracker.nodes[0]
+        }
 
         let inputs_start_idx = ir_nodes_stack.len();
         ir_arena.get(current_node).copy_inputs(&mut ir_nodes_stack);
