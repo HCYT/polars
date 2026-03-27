@@ -98,7 +98,7 @@ pub(crate) struct ExprOrderSimplifier<'a> {
 }
 
 impl<'a> ExprOrderSimplifier<'a> {
-    pub(crate) fn new(
+    pub fn new(
         expr_arena: &'a mut Arena<AExpr>,
         revisit_cache: &'a mut PlHashMap<Node, ObservableOrders>,
     ) -> Self {
@@ -114,7 +114,7 @@ impl<'a> ExprOrderSimplifier<'a> {
 }
 
 impl ExprOrderSimplifier<'_> {
-    pub(crate) fn simplify_projected_exprs(
+    pub fn simplify_projected_exprs(
         &mut self,
         ae_nodes: &[Node],
         allow_deordering_top: bool,
@@ -140,7 +140,7 @@ impl ExprOrderSimplifier<'_> {
         }
     }
 
-    pub(crate) fn internally_observed_orders(&self) -> ObservableOrders {
+    pub fn internally_observed_orders(&self) -> ObservableOrders {
         self.internally_observed
     }
 

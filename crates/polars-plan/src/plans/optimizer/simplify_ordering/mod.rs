@@ -1,4 +1,4 @@
-pub(crate) mod expr;
+pub mod expr;
 pub(crate) mod ir_graph;
 pub(crate) mod ir_node_key;
 
