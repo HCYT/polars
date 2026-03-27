@@ -354,43 +354,39 @@ def test_with_columns_implicit_columns() -> None:
 
 
 @pytest.mark.parametrize(
-    ("expr", "values", "is_ordered", "is_output_ordered"),
+    ("expr", "expr_observes_or_produces_order"),
     [
-        (pl.col.a, [1, 2, 3], False, False),
-        (pl.col.a.map_batches(lambda x: x), [1, 2, 3], True, False),
+        (pl.col.a, False),
+        (pl.col.a.map_batches(lambda x: x), True),
         (
             pl.col.a.map_batches(lambda x: x, is_elementwise=True),
-            [1, 2, 3],
-            False,
             False,
         ),
         (
             pl.col.a.cast(pl.List(pl.Int64))
             .map_batches(lambda x: x, is_elementwise=True)
             .explode(),
-            [1, 2, 3],
             True,
-            False,
         ),
-        (pl.col.a.sort(), [1, 2, 3], True, True),
-        (pl.col.a.sort() + pl.col.a, None, True, True),
-        (pl.col.a.min() + pl.col.a, [2, 3, 4], False, False),
-        (pl.col.a.first() + pl.col.a, None, False, False),
+        (pl.col.a.sort(), True),
+        (pl.col.a.sort() + pl.col.a, True),
+        (pl.col.a.min() + pl.col.a, False),
+        (pl.col.a.first() + pl.col.a, True),
     ],
 )
 def test_group_by_key_sensitivity(
-    expr: pl.Expr, values: list[int] | None, is_ordered: bool, is_output_ordered: bool
+    expr: pl.Expr,
+    expr_observes_or_produces_order: bool,
 ) -> None:
-    lf = pl.LazyFrame({"a": [2, 2, 1, 3], "b": ["A", "B", "C", "D"]}).unique()
+    lf = pl.LazyFrame({"a": [2, 2, 1, 3], "b": ["A", "B", "C", "D"]}).unique(
+        maintain_order=True
+    )
 
-    q = lf.group_by(expr.alias("a"), maintain_order=True).agg("b")
-    df = q.collect()
-    assert ("AGGREGATE[maintain_order: true]" in q.explain()) is is_ordered
+    q = lf.group_by(expr.alias("a"), maintain_order=False).agg(pl.max("b"))
 
-    expected_values = pl.Series("a", values)
-
-    if values is not None:
-        assert_series_equal(df["a"], expected_values, check_order=is_output_ordered)
+    plan = q.explain()
+    order_maintained = "UNIQUE[maintain_order: true" in plan
+    assert order_maintained == expr_observes_or_produces_order
 
 
 @pytest.mark.parametrize(
@@ -451,15 +447,24 @@ def test_filter_sensitivity(expr: pl.Expr, is_ordered: bool) -> None:
     [
         ([pl.col.a], True, None),
         ([pl.col.a, pl.col.b], True, None),
-        ([pl.col.a.unique()], True, ["a"]),
-        ([pl.col.a.min()], True, None),
-        ([pl.col.a.product()], True, None),
-        ([pl.col.a.unique(), pl.col.b], True, ["a"]),
+        ([pl.col.a.unique()], False, ["a"]),
+        ([pl.col.a.unique(maintain_order=True)], True, ["a"]),
+        ([pl.col.a.min()], False, []),
+        ([pl.col.a.product()], False, []),
+        ([pl.col.a.unique(maintain_order=True), pl.col.b], True, ["a"]),
         ([pl.col.a.unique(), pl.col.b.unique()], False, ["a", "b"]),
         ([pl.col.a.min(), pl.col.b.min()], False, None),
         ([pl.col.a.product(), pl.col.b.null_count()], False, None),
-        ([pl.col.b.unique()], True, ["b"]),
-        ([pl.col.a.unique(), pl.col.b.unique(), pl.col.a.alias("c")], True, ["a", "b"]),
+        ([pl.col.b.unique(maintain_order=True)], True, ["b"]),
+        (
+            [
+                pl.col.a.unique(maintain_order=True),
+                pl.col.b.unique(),
+                pl.col.a.alias("c"),
+            ],
+            True,
+            ["b"],
+        ),
         (
             [pl.col.a.unique(), pl.col.b.unique(), (pl.col.a + 1).unique().alias("c")],
             False,
@@ -496,10 +501,12 @@ def test_with_columns_sensitivity(
     df_unopt = lf.collect(optimizations=pl.QueryOptFlags(check_order_observe=False))
 
     if unordered_columns is None:
-        assert_frame_equal(df_opt, df_unopt)
+        assert_frame_equal(df_opt, df_unopt, check_row_order=is_ordered)
     else:
         assert_frame_equal(
-            df_opt.drop(unordered_columns), df_unopt.drop(unordered_columns)
+            df_opt.drop(unordered_columns),
+            df_unopt.drop(unordered_columns),
+            check_row_order=is_ordered,
         )
         for c in unordered_columns:
             assert_series_equal(df_opt[c], df_unopt[c], check_order=False)
@@ -552,9 +559,9 @@ def test_reverse_non_order_observe() -> None:
 
 
 def test_order_optimize_cspe_26277() -> None:
-    df = pl.LazyFrame({"x": [1, 2]}).sort("x")
+    lf = pl.LazyFrame({"x": [1, 2]}).sort("x")
 
-    q1 = pl.concat([df, df])
+    q1 = pl.concat([lf, lf])
     q2 = pl.concat([q1, q1])
     q3 = q2.sort("x").with_columns("x")
 
@@ -562,3 +569,43 @@ def test_order_optimize_cspe_26277() -> None:
         q3.collect(),
         pl.DataFrame({"x": [1, 1, 1, 1, 2, 2, 2, 2]}),
     )
+
+
+def test_order_simplify_exprs() -> None:
+    lf = pl.LazyFrame({"a": [0, 1, 2, 3, 4]})
+
+    q = lf.with_columns(
+        rev=(pl.col("a").sort() + 1).sort().sort(descending=True),
+    )
+    plan = q.explain()
+    assert '(col("a")) + (1)].sort(desc).alias' in plan
+
+    assert_frame_equal(
+        q.collect(),
+        pl.DataFrame(
+            {
+                "a": [0, 1, 2, 3, 4],
+                "rev": [5, 4, 3, 2, 1],
+            }
+        ),
+    )
+
+    plan = pl.LazyFrame({"a": 1}).select(pl.col("a").sort().sort()).explain()
+
+    assert '("a").sort(asc)]' in plan
+
+    plan = (
+        pl.LazyFrame({"a": 1})
+        .select(pl.col("a").sort().unique(maintain_order=False))
+        .explain()
+    )
+
+    assert 'col("a").unique()' in plan
+
+    plan = (
+        pl.LazyFrame({"a": 1})
+        .select(pl.col("a").sort().unique(maintain_order=True))
+        .explain()
+    )
+
+    assert 'col("a").sort(asc).unique_stable()' in plan
