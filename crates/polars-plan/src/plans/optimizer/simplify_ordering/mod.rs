@@ -271,6 +271,8 @@ impl SimplifyIRNodeOrder<'_> {
             },
 
             IR::Distinct { input: _, options } => {
+                use UniqueKeepStrategy as K;
+
                 let ([in_edge], [out_edge]) = unpack_edges!(2);
 
                 if !options.maintain_order || out_edge.is_unordered() {
@@ -279,14 +281,14 @@ impl SimplifyIRNodeOrder<'_> {
                 }
 
                 if in_edge.is_unordered()
-                    || !(options.maintain_order
-                        || matches!(
-                            options.keep_strategy,
-                            UniqueKeepStrategy::First | UniqueKeepStrategy::Last
-                        ))
+                    && !options.maintain_order
+                    && match options.keep_strategy {
+                        K::First | K::Last => false,
+                        K::Any | K::None => true,
+                    }
                 {
                     options.maintain_order = false;
-                    options.keep_strategy = UniqueKeepStrategy::Any;
+                    options.keep_strategy = K::Any;
                     *in_edge = Edge::Unordered;
                 }
             },
