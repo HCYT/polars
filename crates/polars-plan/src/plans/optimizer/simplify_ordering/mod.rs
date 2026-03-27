@@ -530,7 +530,7 @@ impl SimplifyIRNodeOrder<'_> {
             }),
             Some(IRNodeEdgeKeys {
                 out_edges: out_edges_of_new_input_node,
-                out_nodes: new_input_node_out_nodes,
+                out_nodes: out_nodes_of_new_input_node,
                 ..
             }),
         ] = self.ir_node_to_edges_map.get_disjoint_mut([
@@ -548,7 +548,7 @@ impl SimplifyIRNodeOrder<'_> {
 
         out_edges_of_new_input_node[out_edge_idx_in_new_input_node] =
             consumer_node_in_edges[consumer_node_input_idx];
-        new_input_node_out_nodes[out_edge_idx_in_new_input_node] = consumer_node;
+        out_nodes_of_new_input_node[out_edge_idx_in_new_input_node] = consumer_node;
 
         true
     }
