@@ -498,7 +498,7 @@ def test_group_by_input_ordering() -> None:
 
     plan = q.explain()
 
-    # No deordering: Independently ordered key expr with ordered input IR.
+    # Keep sort expr: Independently ordered key expr with ordered input IR.
     assert 'BY [col("a").sort(asc)]' in plan
 
 
